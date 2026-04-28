@@ -1,17 +1,21 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import ToastNotification from './components/ToastNotification'
+import PaymentPage from './views/customer/PaymentPage'  // ← add this
 
 // Customer view (public)
 import CustomerLayout from './views/customer/CustomerLayout'
 import HomePage from './views/customer/HomePage'
 import BookingPage from './views/customer/BookingPage'
+import CustomerAuth from './views/customer/CustomerAuth'
 
 // Nail tech view (dashboard)
 import NailTechLayout from './views/nailtech/NailTechLayout'
 import NailTechAuthLayout from './views/nailtech/NailTechAuthLayout'
 import NailTechLogin from './views/nailtech/NailTechLogin'
 import NailTechDashboard from './views/nailtech/NailTechDashboard'
+
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -31,11 +35,14 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <ToastNotification />
         <Routes>
         {/* Customer-facing routes */}
         <Route path="/" element={<CustomerLayout />}>
           <Route index element={<HomePage />} />
           <Route path="book" element={<BookingPage />} />
+          <Route path="payment" element={<PaymentPage />} />  {/* ← add this */}
+          <Route path="login" element={<CustomerAuth />} />
         </Route>
 
         {/* Redirect /nailtech/ to login (trailing slash fix) */}
