@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import NailGallery from './NailGallery'
 
 export default function HomePage() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const { user } = useAuth()
 
   useEffect(() => {
     async function loadProfile() {
@@ -44,20 +46,23 @@ export default function HomePage() {
         <NailGallery />
       </section>
 
-      <section id="about" className="section about-section">
-        <h2>About</h2>
-        <div className="about-content">
-          <div className="about-text">
-            <h3>{info.business_name}</h3>
-            <p>{loading ? 'Loading...' : info.bio}</p>
-          </div>
-        </div>
-      </section>
+     
 
       <section className="cta-section">
         <h2>Ready to book?</h2>
-        <p>Choose a date and time that works for you.</p>
-        <Link to="/book" className="btn-primary">Book Now</Link>
+        {user ? (
+          <>
+            <p>Choose a date and time that works for you.</p>
+            <Link to="/book" className="btn-primary">Book Now</Link>
+          </>
+        ) : (
+          <>
+            <p>Create an account or log in to book your appointment.</p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <Link to="/login" className="btn-primary">Log In / Sign Up</Link>
+            </div>
+          </>
+        )}
       </section>
 
       <footer className="customer-footer">

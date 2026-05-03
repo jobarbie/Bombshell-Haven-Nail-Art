@@ -17,6 +17,8 @@ Follow these steps to get the booking system working.
 3. Paste into the SQL Editor and click **Run**
 4. You should see success messages (or no errors)
 
+> If you see `Could not find the 'payment_proof_url' column of 'bookings' in the schema cache`, run `supabase/migrations/2026_05_03_fix_payment_proof_schema.sql` in the same SQL Editor.
+
 ## 3. Get Your API Keys
 
 1. Go to **Project Settings** (gear icon) → **API**
@@ -32,6 +34,8 @@ In your project folder (`Bomb`), create a file named `.env`:
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
+
+> If you see `Could not find the 'refund_proof_url' column of 'bookings' in the schema cache`, run `supabase/migrations/2026_05_04_add_refund_proof_to_bookings.sql` in the SQL Editor.
 
 Replace with your actual Project URL and anon key.
 

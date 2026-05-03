@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import BookingForm from './BookingForm'
 
 const SLOT_DURATION_MINUTES = 60
-const OPEN_HOUR = 9
-const CLOSE_HOUR = 18
+const FIXED_SLOTS = [10, 13, 16]
 
 export default function BookingPage() {
   const [availableSlots, setAvailableSlots] = useState([])
@@ -13,62 +13,84 @@ export default function BookingPage() {
   const [approvedBookings, setApprovedBookings] = useState([])
   const [selectedDate, setSelectedDate] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [submitted, setSubmitted] = useState(false)
   const [profileId, setProfileId] = useState(null)
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [myBookings, setMyBookings] = useState([])
+  const [bookingsLoading, setBookingsLoading] = useState(true)
+  const [ratingSubmitting, setRatingSubmitting] = useState({})
+  const [ratingErrors, setRatingErrors] = useState({})
 
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   async function loadData() {
-      try {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .limit(1)
-          .maybeSingle()
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1)
+        .maybeSingle()
 
-        if (profileError) {
-          setProfileId(null)
-          setLoading(false)
-          return
-        }
-
-        const pid = profile?.id
-        setProfileId(pid)
-        if (!pid) {
-          setLoading(false)
-          return
-        }
-
-        const [blockedRes, bookedRes] = await Promise.all([
-          supabase.from('blocked_times').select('start_time, end_time').eq('profile_id', pid),
-          supabase.rpc('get_booked_times', { p_profile_id: pid }),
-        ])
-
-        setBlockedTimes(blockedRes.error ? [] : (blockedRes.data || []))
-        setApprovedBookings(bookedRes.error ? [] : (bookedRes.data || []))
-      } catch {
+      if (profileError) {
         setProfileId(null)
+        setLoading(false)
+        return
       }
-      setLoading(false)
+
+      const pid = profile?.id
+      setProfileId(pid)
+      if (!pid) {
+        setLoading(false)
+        return
+      }
+
+      const [blockedRes, bookedRes] = await Promise.all([
+        supabase.from('blocked_times').select('start_time, end_time').eq('profile_id', pid),
+        supabase.rpc('get_booked_times', { p_profile_id: pid }),
+      ])
+
+      setBlockedTimes(blockedRes.error ? [] : (blockedRes.data || []))
+      setApprovedBookings(bookedRes.error ? [] : (bookedRes.data || []))
+    } catch {
+      setProfileId(null)
     }
+    setLoading(false)
+  }
+
+  async function loadMyBookings() {
+    if (!user?.id) return
+    setBookingsLoading(true)
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('customer_id', user.id)
+      .order('start_time', { ascending: false })
+    if (!error) setMyBookings(data || [])
+    setBookingsLoading(false)
+  }
 
   useEffect(() => {
     loadData()
   }, [])
 
-  // When nail tech is logged in but no profile from DB: ensure profile exists, then use their id
+  useEffect(() => {
+    loadMyBookings()
+  }, [user?.id])
+
   useEffect(() => {
     if (!user?.id || profileId) return
 
     async function ensureProfile() {
-      const { data: existing } = await supabase.from('profiles').select('id').eq('id', user.id).maybeSingle()
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle()
       if (existing) {
         setProfileId(user.id)
         return
       }
-      // Create profile if missing (trigger may have failed or user signed up before schema)
       const { error } = await supabase.from('profiles').insert({
         id: user.id,
         email: user.email,
@@ -85,39 +107,36 @@ export default function BookingPage() {
       return
     }
 
-    // Parse as local date to avoid timezone issues
     const [y, m, d] = selectedDate.split('-').map(Number)
     const baseDate = new Date(y, m - 1, d)
     const slots = []
 
-    for (let h = OPEN_HOUR; h < CLOSE_HOUR; h++) {
-      for (let m = 0; m < 60; m += SLOT_DURATION_MINUTES) {
-        const start = new Date(baseDate)
-        start.setHours(h, m, 0, 0)
-        const end = new Date(start)
-        end.setMinutes(end.getMinutes() + SLOT_DURATION_MINUTES)
+    for (const hour of FIXED_SLOTS) {
+      const start = new Date(baseDate)
+      start.setHours(hour, 0, 0, 0)
+      const end = new Date(start)
+      end.setMinutes(end.getMinutes() + SLOT_DURATION_MINUTES)
 
-        if (start < new Date()) continue
+      if (start < new Date()) continue
 
-        const isBlocked = blockedTimes.some((b) => {
-          const bs = new Date(b.start_time)
-          const be = new Date(b.end_time)
-          return start < be && end > bs
+      const isBlocked = blockedTimes.some((b) => {
+        const bs = new Date(b.start_time)
+        const be = new Date(b.end_time)
+        return start < be && end > bs
+      })
+
+      const isBooked = approvedBookings.some((b) => {
+        const bs = new Date(b.start_time)
+        const be = new Date(b.end_time)
+        return start < be && end > bs
+      })
+
+      if (!isBlocked && !isBooked) {
+        slots.push({
+          start: start.toISOString(),
+          end: end.toISOString(),
+          label: start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         })
-
-        const isBooked = approvedBookings.some((b) => {
-          const bs = new Date(b.start_time)
-          const be = new Date(b.end_time)
-          return start < be && end > bs
-        })
-
-        if (!isBlocked && !isBooked) {
-          slots.push({
-            start: start.toISOString(),
-            end: end.toISOString(),
-            label: start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          })
-        }
       }
     }
 
@@ -138,57 +157,41 @@ export default function BookingPage() {
 
     setSubmitting(true)
     try {
-      console.log('=== CREATING BOOKING ===')
-      console.log('Profile ID being used:', profileId)
-      console.log('Booking data:', {
+      const bookingPayload = {
         profile_id: profileId,
         customer_name: formData.name,
-        customer_email: formData.email,
-        start_time: formData.start_time,
-        end_time: formData.end_time,
-        status: 'pending',
-      })
-      
-      // Check if Supabase is configured
-      const { data: configCheck } = await supabase.from('profiles').select('id').limit(1)
-      console.log('Supabase connection check:', configCheck ? 'OK' : 'FAILED')
-      
-      const { data, error } = await supabase.from('bookings').insert({
-        profile_id: profileId,
-        customer_name: formData.name,
-        customer_email: formData.email,
         customer_phone: formData.phone || null,
         service_type: formData.service || null,
         notes: formData.notes || null,
         start_time: formData.start_time,
         end_time: formData.end_time,
         status: 'pending',
-      }).select()
-
-      console.log('Insert result:', data)
-      console.log('Insert error:', error)
-      if (error) {
-        console.error('Full error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
+        customer_id: user?.id || null,
+        payment_status: 'pending',
       }
-      console.log('=== END CREATING BOOKING ===')
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .insert(bookingPayload)
+        .select()
 
       if (error) {
-        // More detailed error message
         let errorMsg = error.message || 'Booking failed. Please try again.'
         if (error.code === '42501' || error.message?.includes('policy')) {
-          errorMsg = 'Permission denied. Please run the SQL fix: supabase/fix_booking_insert_final.sql in Supabase SQL Editor.'
+          errorMsg = 'Permission denied. Please run the SQL fix in Supabase SQL Editor.'
         } else if (error.code === 'PGRST301' || error.message?.includes('JWT')) {
-          errorMsg = 'Authentication error. Please check your Supabase configuration (.env file).'
+          errorMsg = 'Authentication error. Please check your Supabase configuration.'
         }
         setSubmitError(errorMsg)
         return
       }
-      setSubmitted(true)
+
+      const bookingId = data?.[0]?.id
+      if (bookingId) {
+        navigate('/payment', { state: { bookingId } })
+      } else {
+        setSubmitError('Booking created but could not redirect to payment.')
+      }
     } catch (err) {
       setSubmitError(err?.message || 'Something went wrong. Please try again.')
     } finally {
@@ -196,16 +199,42 @@ export default function BookingPage() {
     }
   }
 
-  if (submitted) {
-    return (
-      <section className="booking-page">
-        <div className="booking-success">
-          <h2>Request Received</h2>
-          <p>Your booking request has been submitted. The nail tech will review and confirm shortly.</p>
-          <p>You'll receive an email once it's approved or declined.</p>
-        </div>
-      </section>
-    )
+  const statusColor = (status) => {
+    if (status === 'approved') return '#10b981'
+    if (status === 'declined') return '#ef4444'
+    return '#f59e0b'
+  }
+
+  const statusIcon = (status) => {
+    if (status === 'approved') return ''
+    if (status === 'declined') return ''
+    return ''
+  }
+
+  const handleRating = async (bookingId, ratingValue) => {
+    setRatingSubmitting((prev) => ({ ...prev, [bookingId]: true }))
+    setRatingErrors((prev) => ({ ...prev, [bookingId]: '' }))
+
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ rating: ratingValue, updated_at: new Date().toISOString() })
+        .eq('id', bookingId)
+
+      if (error) {
+        setRatingErrors((prev) => ({ ...prev, [bookingId]: error.message || 'Failed to save rating.' }))
+      } else {
+        await loadMyBookings()
+      }
+    } catch (err) {
+      setRatingErrors((prev) => ({ ...prev, [bookingId]: 'Failed to save rating.' }))
+    } finally {
+      setRatingSubmitting((prev) => ({ ...prev, [bookingId]: false }))
+    }
+  }
+
+  const getRefundProof = (booking) => {
+    return booking['refund_proof_url'] || null
   }
 
   if (!profileId && !loading) {
@@ -254,6 +283,120 @@ export default function BookingPage() {
           </div>
         )}
       </div>
+
+      {/* ✅ Booking History */}
+      {user && (
+        <div style={{ marginTop: '3rem' }}>
+          <hr style={{ opacity: 0.2, marginBottom: '2rem' }} />
+          <h2>My Bookings</h2>
+
+          {bookingsLoading ? (
+            <p>Loading your bookings...</p>
+          ) : myBookings.length === 0 ? (
+            <p style={{ color: '#9ca3af' }}>You have no bookings yet.</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Date & Time</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Name</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Service</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Status</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Rating</th>
+                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Refund Proof</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myBookings.map((booking) => (
+                  <tr key={booking.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
+                      {new Date(booking.start_time).toLocaleString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
+                      {booking.customer_name}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
+                      {booking.service_type || '—'}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
+                      <span style={{
+                        color: statusColor(booking.status),
+                        fontWeight: 600,
+                        textTransform: 'capitalize',
+                      }}>
+                        {statusIcon(booking.status)} {booking.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
+                      {booking.rating ? (
+                        <span style={{ color: '#f59e0b', fontWeight: 600 }}>
+                          {'★'.repeat(booking.rating)}
+                        </span>
+                      ) : booking.status === 'approved' && new Date(booking.start_time) < new Date() ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => handleRating(booking.id, value)}
+                              disabled={ratingSubmitting[booking.id]}
+                              style={{
+                                padding: '0.1rem 0.35rem',
+                                borderRadius: '6px',
+                                border: '1px solid #d1d5db',
+                                background: ratingSubmitting[booking.id] ? '#f3f4f6' : '#fff',
+                                color: value <= (booking.rating || 0) ? '#f59e0b' : '#d1d5db',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
+                                lineHeight: 1,
+                              }}
+                            >
+                              ★
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
+                          {booking.status === 'approved' ? 'Rate after service' : 'Rating only available for approved bookings'}
+                        </span>
+                      )}
+                      {ratingErrors[booking.id] && (
+                        <div style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                          {ratingErrors[booking.id]}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
+                      {booking.status === 'declined' && getRefundProof(booking) ? (
+                        <a
+                          href={getRefundProof(booking)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#6366f1', fontSize: '0.85rem', fontWeight: 500 }}
+                        >
+                          View Refund
+                        </a>
+                      ) : booking.status === 'declined' ? (
+                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
+                          No refund proof yet
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </section>
   )
 }

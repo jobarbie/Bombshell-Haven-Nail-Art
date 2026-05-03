@@ -14,6 +14,12 @@
 4. Paste into the Supabase SQL Editor
 5. Click **Run** (or press Ctrl+Enter)
 
+> If you see `Could not find the 'payment_proof_url' column of 'bookings' in the schema cache`, open `supabase/migrations/2026_05_03_fix_payment_proof_schema.sql`, paste it into the SQL Editor, and run it.
+
+> If you see `Could not find the 'refund_proof_url' column of 'bookings' in the schema cache`, open `supabase/migrations/2026_05_04_add_refund_proof_to_bookings.sql`, paste it into the SQL Editor, and run it.
+
+> If you see `Could not find the 'rating' column of 'bookings' in the schema cache`, open `supabase/migrations/2026_05_05_add_rating_to_bookings.sql`, paste it into the SQL Editor, and run it.
+
 ## 3. Confirm Success
 
 You should see "Success. No rows returned" or similar. No errors.

@@ -3,7 +3,6 @@ import { useState } from 'react'
 export default function BookingForm({ slots, onSubmit, error, submitting }) {
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [service, setService] = useState('')
   const [notes, setNotes] = useState('')
@@ -13,7 +12,6 @@ export default function BookingForm({ slots, onSubmit, error, submitting }) {
     if (!selectedSlot) return
     onSubmit({
       name,
-      email,
       phone,
       service: service || null,
       notes: notes || null,
@@ -46,13 +44,6 @@ export default function BookingForm({ slots, onSubmit, error, submitting }) {
             placeholder="Full name *"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <input
-            type="email"
-            placeholder="Email *"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
             required
           />
           <input

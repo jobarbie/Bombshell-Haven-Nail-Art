@@ -31,6 +31,20 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function CustomerProtectedRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) {
+    return (
+      <div className="auth-loading">
+        <div className="auth-loading-spinner" />
+        <p>Loading...</p>
+      </div>
+    )
+  }
+  if (!user) return <Navigate to="/login" replace />
+  return children
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -40,9 +54,17 @@ export default function App() {
         {/* Customer-facing routes */}
         <Route path="/" element={<CustomerLayout />}>
           <Route index element={<HomePage />} />
-          <Route path="book" element={<BookingPage />} />
-          <Route path="payment" element={<PaymentPage />} />  {/* ← add this */}
           <Route path="login" element={<CustomerAuth />} />
+          <Route path="book" element={
+            <CustomerProtectedRoute>
+              <BookingPage />
+            </CustomerProtectedRoute>
+          } />
+          <Route path="payment" element={
+            <CustomerProtectedRoute>
+              <PaymentPage />
+            </CustomerProtectedRoute>
+          } />
         </Route>
 
         {/* Redirect /nailtech/ to login (trailing slash fix) */}

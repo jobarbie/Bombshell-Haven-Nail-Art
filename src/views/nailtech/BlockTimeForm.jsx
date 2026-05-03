@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
+const FIXED_SLOTS = [
+  { label: '10:00 AM', start: '10:00', end: '13:00' },
+  { label: '1:00 PM', start: '13:00', end: '16:00' },
+  { label: '4:00 PM', start: '16:00', end: '19:00' },
+]
+
 export default function BlockTimeForm({ profileId, onDone }) {
   const [startDate, setStartDate] = useState('')
-  const [startTime, setStartTime] = useState('09:00')
-  const [endTime, setEndTime] = useState('12:00')
+  const [selectedSlot, setSelectedSlot] = useState(FIXED_SLOTS[0].label)
   const [reason, setReason] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -12,12 +17,11 @@ export default function BlockTimeForm({ profileId, onDone }) {
     e.preventDefault()
     if (!profileId) return
 
-    const start = new Date(`${startDate}T${startTime}`)
-    const end = new Date(`${startDate}T${endTime}`)
-    if (end <= start) {
-      alert('End time must be after start time.')
-      return
-    }
+    const slot = FIXED_SLOTS.find((s) => s.label === selectedSlot)
+    if (!slot) return
+
+    const start = new Date(`${startDate}T${slot.start}`)
+    const end = new Date(`${startDate}T${slot.end}`)
 
     setLoading(true)
     const { error } = await supabase.from('blocked_times').insert({
@@ -31,6 +35,7 @@ export default function BlockTimeForm({ profileId, onDone }) {
       alert('Failed to block time: ' + error.message)
     } else {
       setStartDate('')
+      setSelectedSlot(FIXED_SLOTS[0].label)
       setReason('')
       onDone()
     }
@@ -50,18 +55,42 @@ export default function BlockTimeForm({ profileId, onDone }) {
           min={minDate}
           required
         />
-        <div className="time-row">
-          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-          <span>to</span>
-          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+
+        <div style={{ marginTop: '0.75rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+            Select time slot to block:
+          </label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {FIXED_SLOTS.map((slot) => (
+              <button
+                key={slot.label}
+                type="button"
+                onClick={() => setSelectedSlot(slot.label)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  border: '2px solid',
+                  borderColor: selectedSlot === slot.label ? '#a855f7' : '#e5e7eb',
+                  backgroundColor: selectedSlot === slot.label ? '#a855f7' : 'transparent',
+                  color: selectedSlot === slot.label ? '#fff' : '#333',
+                  fontWeight: selectedSlot === slot.label ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                }}
+              >
+                {slot.label}
+              </button>
+            ))}
+          </div>
         </div>
+
         <input
           type="text"
           placeholder="Reason (optional)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          style={{ marginTop: '0.75rem' }}
         />
-        <button type="submit" className="btn-primary" disabled={loading}>
+        <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '0.75rem' }}>
           {loading ? 'Blocking...' : 'Block Time'}
         </button>
       </form>
