@@ -18,6 +18,7 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [myBookings, setMyBookings] = useState([])
   const [bookingsLoading, setBookingsLoading] = useState(true)
+  const [bookingFilter, setBookingFilter] = useState('pending')
   const [ratingSubmitting, setRatingSubmitting] = useState({})
   const [ratingErrors, setRatingErrors] = useState({})
 
@@ -199,28 +200,14 @@ export default function BookingPage() {
     }
   }
 
-  const statusColor = (status) => {
-    if (status === 'approved') return '#10b981'
-    if (status === 'declined') return '#ef4444'
-    return '#f59e0b'
-  }
-
-  const statusIcon = (status) => {
-    if (status === 'approved') return ''
-    if (status === 'declined') return ''
-    return ''
-  }
-
   const handleRating = async (bookingId, ratingValue) => {
     setRatingSubmitting((prev) => ({ ...prev, [bookingId]: true }))
     setRatingErrors((prev) => ({ ...prev, [bookingId]: '' }))
-
     try {
       const { error } = await supabase
         .from('bookings')
         .update({ rating: ratingValue, updated_at: new Date().toISOString() })
         .eq('id', bookingId)
-
       if (error) {
         setRatingErrors((prev) => ({ ...prev, [bookingId]: error.message || 'Failed to save rating.' }))
       } else {
@@ -233,8 +220,27 @@ export default function BookingPage() {
     }
   }
 
-  const getRefundProof = (booking) => {
-    return booking['refund_proof_url'] || null
+  const getRefundProof = (booking) => booking['refund_proof_url'] || null
+
+  const statusColor = (status) => {
+    if (status === 'approved') return '#10b981'
+    if (status === 'declined') return '#ef4444'
+    return '#f59e0b'
+  }
+
+  const pendingBookings = myBookings.filter((b) => b.status === 'pending')
+  const approvedMyBookings = myBookings.filter((b) => b.status === 'approved')
+  const declinedBookings = myBookings.filter((b) => b.status === 'declined')
+
+  const filteredBookings = bookingFilter === 'pending'
+    ? pendingBookings
+    : bookingFilter === 'approved'
+    ? approvedMyBookings
+    : declinedBookings
+
+  const refundUrl = (booking) => {
+    const url = getRefundProof(booking)
+    return url
   }
 
   if (!profileId && !loading) {
@@ -242,7 +248,7 @@ export default function BookingPage() {
       <section className="booking-page">
         <div className="booking-unavailable">
           <h2>Booking coming soon</h2>
-          <p>We're getting things ready. Please check back soon.</p>
+          <p>We are getting things ready. Please check back soon.</p>
         </div>
       </section>
     )
@@ -284,7 +290,6 @@ export default function BookingPage() {
         )}
       </div>
 
-      {/* ✅ Booking History */}
       {user && (
         <div style={{ marginTop: '3rem' }}>
           <hr style={{ opacity: 0.2, marginBottom: '2rem' }} />
@@ -295,105 +300,160 @@ export default function BookingPage() {
           ) : myBookings.length === 0 ? (
             <p style={{ color: '#9ca3af' }}>You have no bookings yet.</p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Date & Time</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Name</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Service</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Status</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Rating</th>
-                  <th style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>Refund Proof</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myBookings.map((booking) => (
-                  <tr key={booking.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
-                      {new Date(booking.start_time).toLocaleString([], {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
-                      {booking.customer_name}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
-                      {booking.service_type || '—'}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
-                      <span style={{
-                        color: statusColor(booking.status),
-                        fontWeight: 600,
-                        textTransform: 'capitalize',
-                      }}>
-                        {statusIcon(booking.status)} {booking.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
-                      {booking.rating ? (
-                        <span style={{ color: '#f59e0b', fontWeight: 600 }}>
-                          {'★'.repeat(booking.rating)}
-                        </span>
-                      ) : booking.status === 'approved' && new Date(booking.start_time) < new Date() ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => handleRating(booking.id, value)}
-                              disabled={ratingSubmitting[booking.id]}
-                              style={{
-                                padding: '0.1rem 0.35rem',
-                                borderRadius: '6px',
-                                border: '1px solid #d1d5db',
-                                background: ratingSubmitting[booking.id] ? '#f3f4f6' : '#fff',
-                                color: value <= (booking.rating || 0) ? '#f59e0b' : '#d1d5db',
-                                cursor: 'pointer',
-                                fontSize: '0.9rem',
-                                lineHeight: 1,
-                              }}
-                            >
-                              ★
-                            </button>
-                          ))}
+            <div>
+              <div style={{ display: 'flex', gap: '0.5rem', margin: '1rem 0 1.5rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setBookingFilter('pending')}
+                  style={{
+                    backgroundColor: bookingFilter === 'pending' ? '#f59e0b' : 'transparent',
+                    color: bookingFilter === 'pending' ? '#000' : '#333',
+                    fontWeight: bookingFilter === 'pending' ? 'bold' : 'normal',
+                    border: '1px solid #e5e7eb',
+                    padding: '0.4rem 1rem',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Pending ({pendingBookings.length})
+                </button>
+                <button
+                  onClick={() => setBookingFilter('approved')}
+                  style={{
+                    backgroundColor: bookingFilter === 'approved' ? '#10b981' : 'transparent',
+                    color: bookingFilter === 'approved' ? '#fff' : '#333',
+                    fontWeight: bookingFilter === 'approved' ? 'bold' : 'normal',
+                    border: '1px solid #e5e7eb',
+                    padding: '0.4rem 1rem',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Approved ({approvedMyBookings.length})
+                </button>
+                <button
+                  onClick={() => setBookingFilter('declined')}
+                  style={{
+                    backgroundColor: bookingFilter === 'declined' ? '#ef4444' : 'transparent',
+                    color: bookingFilter === 'declined' ? '#fff' : '#333',
+                    fontWeight: bookingFilter === 'declined' ? 'bold' : 'normal',
+                    border: '1px solid #e5e7eb',
+                    padding: '0.4rem 1rem',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Declined ({declinedBookings.length})
+                </button>
+              </div>
+
+              {filteredBookings.length === 0 ? (
+                <p style={{ color: '#9ca3af' }}>No {bookingFilter} bookings.</p>
+              ) : (
+                <div className="booking-list">
+                  {filteredBookings.map((booking) => (
+                    <div key={booking.id} className={'booking-card ' + booking.status}>
+                      <div className="booking-info">
+                        <div className="booking-header">
+                          <strong className="customer-name">{booking.customer_name}</strong>
+                          <span style={{ color: statusColor(booking.status), fontWeight: 600, textTransform: 'uppercase', fontSize: '0.8rem' }}>
+                            {booking.status}
+                          </span>
                         </div>
-                      ) : (
-                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
-                          {booking.status === 'approved' ? 'Rate after service' : 'Rating only available for approved bookings'}
-                        </span>
-                      )}
-                      {ratingErrors[booking.id] && (
-                        <div style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                          {ratingErrors[booking.id]}
+                        <div className="booking-details">
+                          <div className="detail-item">
+                            <span className="detail-label">Date and Time:</span>
+                            <span>
+                              {new Date(booking.start_time).toLocaleString([], {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          {booking.customer_phone && (
+                            <div className="detail-item">
+                              <span className="detail-label">Phone:</span>
+                              <span>{booking.customer_phone}</span>
+                            </div>
+                          )}
+                          {booking.service_type && (
+                            <div className="detail-item">
+                              <span className="detail-label">Service:</span>
+                              <span>{booking.service_type}</span>
+                            </div>
+                          )}
+                          {booking.notes && (
+                            <div className="detail-item">
+                              <span className="detail-label">Notes:</span>
+                              <span>{booking.notes}</span>
+                            </div>
+                          )}
+                          {booking.status === 'approved' && (
+                            <div className="detail-item">
+                              <span className="detail-label">Rating:</span>
+                              <span>
+                                {booking.rating ? (
+                                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>
+                                    {'★'.repeat(booking.rating)}{'☆'.repeat(5 - booking.rating)}
+                                  </span>
+                                ) : new Date(booking.start_time) < new Date() ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    {[1, 2, 3, 4, 5].map((value) => (
+                                      <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => handleRating(booking.id, value)}
+                                        disabled={ratingSubmitting[booking.id]}
+                                        style={{
+                                          padding: '0.1rem 0.35rem',
+                                          borderRadius: '6px',
+                                          border: '1px solid #d1d5db',
+                                          background: ratingSubmitting[booking.id] ? '#f3f4f6' : '#fff',
+                                          color: '#d1d5db',
+                                          cursor: 'pointer',
+                                          fontSize: '1rem',
+                                        }}
+                                      >
+                                        ★
+                                      </button>
+                                    ))}
+                                    <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>Rate this service</span>
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Rate after service</span>
+                                )}
+                              </span>
+                              {ratingErrors[booking.id] && (
+                                <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>
+                                  {ratingErrors[booking.id]}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {booking.status === 'declined' && (
+                            <div className="detail-item">
+                              <span className="detail-label">Refund Proof:</span>
+                              <span>
+                                {refundUrl(booking) ? (
+                                  <a href={refundUrl(booking)} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '0.85rem', fontWeight: 500 }}>
+                                    View Refund Screenshot
+                                  </a>
+                                ) : (
+                                  <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>No refund proof yet</span>
+                                )}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.9rem' }}>
-                      {booking.status === 'declined' && getRefundProof(booking) ? (
-                        <a
-                          href={getRefundProof(booking)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: '#6366f1', fontSize: '0.85rem', fontWeight: 500 }}
-                        >
-                          View Refund
-                        </a>
-                      ) : booking.status === 'declined' ? (
-                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
-                          No refund proof yet
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

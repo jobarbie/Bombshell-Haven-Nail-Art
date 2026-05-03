@@ -26,8 +26,8 @@ export default function ToastNotification() {
             const date = new Date(start_time).toLocaleDateString()
             const message =
               status === 'approved'
-                ? `✅ Your booking on ${date} has been approved!`
-                : `❌ Your booking on ${date} was declined.`
+                ? `Your booking on ${date} has been approved!`
+                : `Your booking on ${date} was declined.`
             const id = Date.now()
             setToasts((prev) => [...prev, { id, message }])
             setTimeout(() => {
