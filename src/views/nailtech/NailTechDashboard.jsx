@@ -16,6 +16,12 @@ export default function NailTechDashboard() {
   const [allClientsView, setAllClientsView] = useState('approved')
   const [predictions, setPredictions] = useState([])
   const [predictionsLoading, setPredictionsLoading] = useState(false)
+  
+  // ✅ Print configuration state
+  const [showPrintModal, setShowPrintModal] = useState(false)
+  const [printStartDate, setPrintStartDate] = useState('')
+  const [printEndDate, setPrintEndDate] = useState('')
+  
   const subscriptionRef = useRef(null)
 
   const loadBookings = useCallback(async () => {
@@ -172,6 +178,45 @@ export default function NailTechDashboard() {
   const upcomingPending = allPending.filter((b) => new Date(b.start_time) >= new Date())
   const pastApproved = allApproved.filter((b) => new Date(b.start_time) < new Date())
 
+  // Filters by selected date range before printing
+  const getActiveBookingsForPrint = () => {
+    let baseList = []
+    switch (dashboardView) {
+      case 'pending': baseList = upcomingPending; break;
+      case 'upcoming': baseList = upcomingApproved; break;
+      case 'past': baseList = pastApproved; break;
+      case 'declined': baseList = allDeclined; break;
+      default: baseList = [];
+    }
+
+    if (printStartDate || printEndDate) {
+      return baseList.filter(b => {
+        const bookingDate = new Date(b.start_time);
+        
+        let isAfterStart = true;
+        let isBeforeEnd = true;
+
+        if (printStartDate) {
+          const start = new Date(printStartDate + 'T00:00:00');
+          isAfterStart = bookingDate >= start;
+        }
+        if (printEndDate) {
+          const end = new Date(printEndDate + 'T23:59:59');
+          isBeforeEnd = bookingDate <= end;
+        }
+
+        return isAfterStart && isBeforeEnd;
+      });
+    }
+
+    return baseList;
+  }
+
+  const handlePrintSubmit = () => {
+    window.print()
+    setShowPrintModal(false) // Optionally close the modal automatically after printing
+  }
+
   function BookingCard({ booking, type, onStatusChange }) {
     const [paymentProofExpanded, setPaymentProofExpanded] = useState(false)
     const [refundProofExpanded, setRefundProofExpanded] = useState(false)
@@ -305,7 +350,7 @@ export default function NailTechDashboard() {
                 <p className="notes">{booking.notes}</p>
               </div>
             )}
-            {/* ✅ Payment Proof */}
+            
             {booking.payment_proof_url ? (
               <div className="detail-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span className="detail-label">Payment Proof:</span>
@@ -342,7 +387,6 @@ export default function NailTechDashboard() {
               </div>
             )}
 
-            {/* ✅ Refund Proof */}
             {booking.refund_proof_url ? (
               <div className="detail-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span className="detail-label">Refund Proof:</span>
@@ -480,31 +524,8 @@ export default function NailTechDashboard() {
           <BlockTimeForm profileId={user?.id} onDone={onBlockAdded} />
         )}
 
-        {/*  Stats always visible */}
         {!loading && (
-          <div className="dashboard-stats">
-            <div className="stat-card stat-pending">
-              <div className="stat-value">{upcomingPending.length}</div>
-              <div className="stat-label">Pending Requests</div>
-            </div>
-            <div className="stat-card stat-approved">
-              <div className="stat-value">{upcomingApproved.length}</div>
-              <div className="stat-label">Upcoming Appointments</div>
-            </div>
-            <div className="stat-card stat-total">
-              <div className="stat-value">{pastApproved.length}</div>
-              <div className="stat-label">Past Appointments</div>
-            </div>
-            <div className="stat-card stat-declined">
-              <div className="stat-value">{allDeclined.length}</div>
-              <div className="stat-label">Declined</div>
-            </div>
-          </div>
-        )}
-
-        {/* ✅ Only 4 filter buttons */}
-        {!loading && (
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               onClick={() => setDashboardView('pending')}
               className={`btn-outline ${dashboardView === 'pending' ? 'active' : ''}`}
@@ -549,10 +570,20 @@ export default function NailTechDashboard() {
             >
               Declined
             </button>
+            
+            {/* ✅ Single Print Button on the right that triggers the modal */}
+            <div style={{ marginLeft: 'auto' }}>
+              <button
+                onClick={() => setShowPrintModal(true)}
+                className="btn-outline"
+                title="Print current bookings"
+              >
+                🖨️ Print Bookings
+              </button>
+            </div>
           </div>
         )}
 
-        {/* ✅ Show only selected view */}
         {dashboardView === 'pending' && (
           <section className="dashboard-section">
             <div className="section-header">
@@ -629,42 +660,6 @@ export default function NailTechDashboard() {
     )
   }
 
-  function renderAllPending() {
-    return allPending.length === 0 ? (
-      <div className="empty-state"><p>No pending bookings.</p></div>
-    ) : (
-      <div className="booking-list">
-        {allPending.map((b) => (
-          <BookingCard key={b.id} booking={b} type="pending" onStatusChange={handleStatusChange} />
-        ))}
-      </div>
-    )
-  }
-
-  function renderAllApproved() {
-    return allApproved.length === 0 ? (
-      <div className="empty-state"><p>No approved bookings.</p></div>
-    ) : (
-      <div className="booking-list">
-        {allApproved.map((b) => (
-          <BookingCard key={b.id} booking={b} type="approved" />
-        ))}
-      </div>
-    )
-  }
-
-  function renderAllDeclined() {
-    return allDeclined.length === 0 ? (
-      <div className="empty-state"><p>No declined bookings.</p></div>
-    ) : (
-      <div className="booking-list">
-        {allDeclined.map((b) => (
-          <BookingCard key={b.id} booking={b} type="declined" />
-        ))}
-      </div>
-    )
-  }
-
   function renderAllClients() {
     return (
       <>
@@ -722,19 +717,19 @@ export default function NailTechDashboard() {
               {allClientsView === 'pending' && (
                 <>
                   <div className="section-header"><h2>All Pending Clients</h2></div>
-                  {renderAllPending()}
+                  {allPending.length === 0 ? <div className="empty-state"><p>No pending bookings.</p></div> : <div className="booking-list">{allPending.map((b) => <BookingCard key={b.id} booking={b} type="pending" onStatusChange={handleStatusChange} />)}</div>}
                 </>
               )}
               {allClientsView === 'approved' && (
                 <>
                   <div className="section-header"><h2>All Approved Clients</h2></div>
-                  {renderAllApproved()}
+                  {allApproved.length === 0 ? <div className="empty-state"><p>No approved bookings.</p></div> : <div className="booking-list">{allApproved.map((b) => <BookingCard key={b.id} booking={b} type="approved" />)}</div>}
                 </>
               )}
               {allClientsView === 'declined' && (
                 <>
                   <div className="section-header"><h2>All Declined Clients</h2></div>
-                  {renderAllDeclined()}
+                  {allDeclined.length === 0 ? <div className="empty-state"><p>No declined bookings.</p></div> : <div className="booking-list">{allDeclined.map((b) => <BookingCard key={b.id} booking={b} type="declined" />)}</div>}
                 </>
               )}
             </section>
@@ -818,11 +813,157 @@ export default function NailTechDashboard() {
 
   return (
     <div className="dashboard">
-      {view === 'dashboard'
-        ? renderDashboard()
-        : view === 'allClients'
-        ? renderAllClients()
-        : renderPredictions()}
+      {/* Dynamic styles injected specifically for formatting the print view */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          body { 
+            background: white !important; 
+            margin: 0; 
+            padding: 20px; 
+            color: black;
+          }
+          .print-header {
+            text-align: center;
+            margin-bottom: 20px;
+            font-family: sans-serif;
+          }
+          .print-date-range {
+            font-size: 14px;
+            font-weight: normal;
+            color: #555;
+            margin-top: 5px;
+          }
+          .print-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            font-family: sans-serif; 
+            font-size: 12px;
+          }
+          .print-table th, .print-table td { 
+            border: 1px solid #000; 
+            padding: 8px; 
+            text-align: left; 
+          }
+          .print-table th { 
+            background-color: #f2f2f2 !important; 
+            -webkit-print-color-adjust: exact;
+            font-weight: bold;
+          }
+        }
+        @media screen {
+          .print-only { display: none !important; }
+        }
+      `}</style>
+
+      {/* Wrapping the actual interactive dashboard layout in a no-print div */}
+      <div className="no-print">
+        {view === 'dashboard'
+          ? renderDashboard()
+          : view === 'allClients'
+          ? renderAllClients()
+          : renderPredictions()}
+      </div>
+
+      {/* ✅ The Print Options Modal */}
+      {showPrintModal && (
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '12px', maxWidth: '400px', width: '90%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#111827' }}>Print Options</h3>
+            <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+              Select a date range to filter the bookings before printing. Leave blank to print all records.
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', fontWeight: '500', color: '#374151' }}>Start Date</label>
+                <input 
+                  type="date" 
+                  value={printStartDate} 
+                  onChange={(e) => setPrintStartDate(e.target.value)} 
+                  style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #d1d5db', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.4rem', fontWeight: '500', color: '#374151' }}>End Date</label>
+                <input 
+                  type="date" 
+                  value={printEndDate} 
+                  onChange={(e) => setPrintEndDate(e.target.value)} 
+                  style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid #d1d5db', outline: 'none' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button 
+                className="btn-outline" 
+                onClick={() => {
+                  setShowPrintModal(false)
+                  // Optionally clear dates when canceling: setPrintStartDate(''); setPrintEndDate('');
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-approve" 
+                onClick={handlePrintSubmit}
+                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#745e4c', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                Print Document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden Excel-like table structure that only shows up when printing */}
+      <div className="print-only">
+        <h2 className="print-header">
+          {dashboardView.charAt(0).toUpperCase() + dashboardView.slice(1)} Bookings Report
+          {/* Shows the filtered date range on the printed paper if selected */}
+          {(printStartDate || printEndDate) && (
+            <div className="print-date-range">
+              ({printStartDate ? new Date(printStartDate).toLocaleDateString() : 'Start'} 
+              {' - '} 
+              {printEndDate ? new Date(printEndDate).toLocaleDateString() : 'End'})
+            </div>
+          )}
+        </h2>
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Date & Time</th>
+              <th>Phone Number</th>
+              <th>Service</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {getActiveBookingsForPrint().length > 0 ? (
+              getActiveBookingsForPrint().map((b) => (
+                <tr key={b.id}>
+                  <td>{b.customer_name}</td>
+                  <td>{formatDateTime(b.start_time)}</td>
+                  <td>{b.customer_phone || 'N/A'}</td>
+                  <td>{b.service_type || 'N/A'}</td>
+                  <td style={{ textTransform: 'capitalize' }}>{b.status}</td>
+                  <td>{b.notes || ''}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>
+                  No bookings found for this view and date range.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
